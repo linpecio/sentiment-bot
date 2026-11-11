@@ -1,0 +1,65 @@
+# Static watchlist: edit this file to change what the bot covers.
+# Times are local exchange time; weekdays are Mon=0 .. Sun=6.
+
+locations:
+  US:
+    name: United States (NYSE/Nasdaq)
+    timezone: America/New_York
+    open: "09:30"
+    close: "16:00"
+    weekdays: [0, 1, 2, 3, 4]
+  UK:
+    name: United Kingdom (LSE)
+    timezone: Europe/London
+    open: "08:00"
+    close: "16:30"
+    weekdays: [0, 1, 2, 3, 4]
+  DE:
+    name: Germany (Xetra)
+    timezone: Europe/Berlin
+    open: "09:00"
+    close: "17:30"
+    weekdays: [0, 1, 2, 3, 4]
+  JP:
+    name: Japan (TSE)
+    timezone: Asia/Tokyo
+    open: "09:00"
+    close: "15:30"
+    weekdays: [0, 1, 2, 3, 4]
+  HK:
+    name: Hong Kong (HKEX)
+    timezone: Asia/Hong_Kong
+    open: "09:30"
+    close: "16:00"
+    weekdays: [0, 1, 2, 3, 4]
+  FX:
+    name: Global FX
+    timezone: America/New_York
+    open: "00:00"
+    close: "23:59"
+    weekdays: [0, 1, 2, 3, 4]
+
+# asset_class is free text; used for grouping and /sentiment filters.
+# ibkr: fields passed to the IBKR contract when the live provider is wired in.
+assets:
+  - {symbol: SPY,  name: S&P 500 ETF,       asset_class: Equity Index, location: US, ibkr: {secType: STK, exchange: SMART, currency: USD}}
+  - {symbol: QQQ,  name: Nasdaq 100 ETF,    asset_class: Equity Index, location: US, ibkr: {secType: STK, exchange: SMART, currency: USD}}
+  - {symbol: AAPL, name: Apple,             asset_class: Equity,       location: US, ibkr: {secType: STK, exchange: SMART, currency: USD}}
+  - {symbol: NVDA, name: Nvidia,            asset_class: Equity,       location: US, ibkr: {secType: STK, exchange: SMART, currency: USD}}
+  - {symbol: TLT,  name: 20Y+ Treasury ETF, asset_class: Bonds,        location: US, ibkr: {secType: STK, exchange: SMART, currency: USD}}
+  - {symbol: GLD,  name: Gold ETF,          asset_class: Commodities,  location: US, ibkr: {secType: STK, exchange: SMART, currency: USD}}
+  - {symbol: SHEL, name: Shell,             asset_class: Equity,       location: UK, ibkr: {secType: STK, exchange: LSE,   currency: GBP}}
+  - {symbol: HSBA, name: HSBC,              asset_class: Equity,       location: UK, ibkr: {secType: STK, exchange: LSE,   currency: GBP}}
+  - {symbol: SAP,  name: SAP,               asset_class: Equity,       location: DE, ibkr: {secType: STK, exchange: IBIS,  currency: EUR}}
+  - {symbol: "7203", name: Toyota,          asset_class: Equity,       location: JP, ibkr: {secType: STK, exchange: TSEJ,  currency: JPY}}
+  - {symbol: "700",  name: Tencent,         asset_class: Equity,       location: HK, ibkr: {secType: STK, exchange: SEHK,  currency: HKD}}
+  - {symbol: EUR.USD, name: EUR/USD,        asset_class: FX,           location: FX, ibkr: {secType: CASH, exchange: IDEALPRO, currency: USD}}
+  - {symbol: USD.JPY, name: USD/JPY,        asset_class: FX,           location: FX, ibkr: {secType: CASH, exchange: IDEALPRO, currency: JPY}}
+
+settings:
+  # Minutes after each market opens to push an automatic report.
+  report_offset_minutes: 15
+  # How many headlines per asset to score.
+  headlines_per_asset: 10
+  # How many movers to show per report.
+  top_n: 10

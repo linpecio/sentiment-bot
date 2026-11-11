@@ -13,7 +13,7 @@ from .config import DEFAULT_PATH, load_watchlist
 from .data import make_provider
 from .market_hours import is_open, next_open
 from .report import analyse, format_report
-from .sentiment import LexiconScorer
+from .sentiment import make_scorer
 
 log = logging.getLogger("sentiment-bot")
 
@@ -111,8 +111,14 @@ def main() -> None:
                 host=os.getenv("IBKR_HOST", "127.0.0.1"),
                 port=int(os.getenv("IBKR_PORT", "4001")),
                 client_id=int(os.getenv("IBKR_CLIENT_ID", "17")),
-                news_providers=os.getenv("IBKR_NEWS_PROVIDERS", "BRFG+BRFUPDN+DJNL")))),
-        scorer=LexiconScorer(),
+                news_providers=os.getenv("IBKR_NEWS_PROVIDERS", "BRFG+BRFUPDN+DJNL"),
+                market_data_type=int(os.getenv("IBKR_MARKET_DATA_TYPE", "1")),
+                lookback_hours=int(os.getenv("NEWS_LOOKBACK_HOURS", "24"))))),
+        scorer=make_scorer(
+            os.getenv("SCORER", "lexicon"),
+            **({} if os.getenv("SCORER", "lexicon").lower() != "claude" else dict(
+                model=os.getenv("SENTIMENT_MODEL", "claude-opus-5-5"),
+                effort=os.getenv("SENTIMENT_EFFORT", "low")))),
         chat_ids=_env_chat_ids(),
     )
     for name, fn in [("start", cmd_start), ("help", cmd_start), ("sentiment", cmd_sentiment),

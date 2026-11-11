@@ -1,5 +1,7 @@
 python-telegram-bot[job-queue]==21.6
 PyYAML>=6.0
 python-dotenv>=1.0
-# Needed only when DATA_PROVIDER=ibkr:
-# ib_async>=1.0
+# Needed when SCORER=claude:
+anthropic>=2.8
+# Needed when DATA_PROVIDER=ibkr:
+ib_async>=2.0

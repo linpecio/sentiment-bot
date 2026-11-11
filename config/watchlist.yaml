@@ -1,4 +1,5 @@
-# Static watchlist: edit this file to change what the bot covers.
+# Default watchlist. Change it from Telegram with /add, /remove, /addlocation and
+# /removelocation (saved to watchlist.local.yaml), or edit this file directly.
 # Times are local exchange time; weekdays are Mon=0 .. Sun=6.
 
 locations:
@@ -8,30 +9,35 @@ locations:
     open: "09:30"
     close: "16:00"
     weekdays: [0, 1, 2, 3, 4]
+    ibkr: {exchange: SMART, currency: USD}
   UK:
     name: United Kingdom (LSE)
     timezone: Europe/London
     open: "08:00"
     close: "16:30"
     weekdays: [0, 1, 2, 3, 4]
+    ibkr: {exchange: LSE, currency: GBP}
   DE:
     name: Germany (Xetra)
     timezone: Europe/Berlin
     open: "09:00"
     close: "17:30"
     weekdays: [0, 1, 2, 3, 4]
+    ibkr: {exchange: IBIS, currency: EUR}
   JP:
     name: Japan (TSE)
     timezone: Asia/Tokyo
     open: "09:00"
     close: "15:30"
     weekdays: [0, 1, 2, 3, 4]
+    ibkr: {exchange: TSEJ, currency: JPY}
   HK:
     name: Hong Kong (HKEX)
     timezone: Asia/Hong_Kong
     open: "09:30"
     close: "16:00"
     weekdays: [0, 1, 2, 3, 4]
+    ibkr: {exchange: SEHK, currency: HKD}
   FX:
     name: Global FX
     timezone: America/New_York

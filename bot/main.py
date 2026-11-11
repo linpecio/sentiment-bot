@@ -9,7 +9,8 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import Application, CommandHandler, ContextTypes
 
-from .config import DEFAULT_PATH, load_watchlist
+from . import watchlist_edit as wedit
+from .config import load_watchlist, read_raw
 from .data import make_provider
 from .market_hours import is_open, next_open
 from .report import analyse, format_report
@@ -18,8 +19,8 @@ from .sentiment import LexiconScorer
 log = logging.getLogger("sentiment-bot")
 
 
-def _env_chat_ids() -> list[int]:
-    return [int(x) for x in os.getenv("REPORT_CHAT_IDS", "").replace(" ", "").split(",") if x]
+def _env_ids(name: str) -> list[int]:
+    return [int(x) for x in os.getenv(name, "").replace(" ", "").split(",") if x]
 
 
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -28,7 +29,12 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
         "/sentiment: ranked sentiment for the whole list\n"
         "/sentiment <class|location|symbol>: filter, e.g. /sentiment FX or /sentiment US\n"
         "/markets: which markets are open and when the next ones open\n"
-        "/watchlist: what the bot covers")
+        "/watchlist: what the bot covers\n\n"
+        "Editing the list (admins only):\n"
+        "/add SYMBOL LOCATION CLASS [| Name], e.g. /add TSLA US Equity | Tesla\n"
+        "/remove SYMBOL\n"
+        "/addlocation CODE Timezone OPEN CLOSE [Name], e.g. /addlocation SG Asia/Singapore 09:00 17:00 Singapore (SGX)\n"
+        "/removelocation CODE")
 
 
 async def cmd_sentiment(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -56,7 +62,80 @@ async def cmd_markets(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
 async def cmd_watchlist(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
     wl = ctx.application.bot_data["wl"]
     lines = [f"{a.symbol}: {a.name} · {a.asset_class} · {a.location}" for a in wl.assets]
-    await update.message.reply_text("\n".join(lines))
+    lines += ["", "Locations: " + ", ".join(wl.locations)]
+    await update.message.reply_text("\n".join(lines) if wl.assets else "The watchlist is empty. Add with /add.")
+
+
+def _split_name(args: list[str]) -> tuple[list[str], str | None]:
+    text = " ".join(args)
+    if "|" in text:
+        head, name = text.split("|", 1)
+        return head.split(), name.strip() or None
+    return args, None
+
+
+async def _apply_edit(update: Update, ctx: ContextTypes.DEFAULT_TYPE, fn, *args, done: str) -> None:
+    app = ctx.application
+    if update.effective_user.id not in app.bot_data["admin_ids"]:
+        await update.message.reply_text(
+            f"Only admins can edit the watchlist. Your user ID is {update.effective_user.id}; "
+            "add it to ADMIN_CHAT_IDS in .env and restart the bot.")
+        return
+    try:
+        raw = fn(app.bot_data["raw"], *args)
+        wl = wedit.save(raw)
+    except wedit.EditError as e:
+        await update.message.reply_text(f"Not changed: {e}")
+        return
+    old_locs = set(app.bot_data["wl"].locations)
+    app.bot_data.update(raw=raw, wl=wl)
+    if app.bot_data["chat_ids"]:
+        for code in set(wl.locations) - old_locs:
+            schedule_open(app, code)
+        for code in old_locs - set(wl.locations):
+            for job in app.job_queue.get_jobs_by_name(f"open:{code}"):
+                job.schedule_removal()
+    log.info("Watchlist edited by %s: %s", update.effective_user.id, done)
+    await update.message.reply_text(f"Saved. {done}")
+
+
+async def cmd_add(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    args, name = _split_name(ctx.args or [])
+    if len(args) < 3:
+        await update.message.reply_text("Usage: /add SYMBOL LOCATION CLASS [| Name]\n"
+                                        "e.g. /add TSLA US Equity | Tesla  or  /add GBP.USD FX FX")
+        return
+    symbol, loc, cls = args[0], args[1], " ".join(args[2:])
+    await _apply_edit(update, ctx, wedit.add_asset, symbol, loc, cls, name,
+                      done=f"Added {symbol.upper()} ({cls}, {loc.upper()}).")
+
+
+async def cmd_remove(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if len(ctx.args or []) != 1:
+        await update.message.reply_text("Usage: /remove SYMBOL")
+        return
+    await _apply_edit(update, ctx, wedit.remove_asset, ctx.args[0], done=f"Removed {ctx.args[0].upper()}.")
+
+
+async def cmd_addlocation(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    args = ctx.args or []
+    if len(args) < 4:
+        await update.message.reply_text(
+            "Usage: /addlocation CODE Timezone OPEN CLOSE [Name]\n"
+            "e.g. /addlocation SG Asia/Singapore 09:00 17:00 Singapore (SGX)\n"
+            "Times are local exchange time, Mon to Fri.")
+        return
+    code, tz, o, c = args[:4]
+    await _apply_edit(update, ctx, wedit.add_location, code, tz, o, c, " ".join(args[4:]) or None,
+                      done=f"Added location {code.upper()} ({tz}, {o} to {c}).")
+
+
+async def cmd_removelocation(update: Update, ctx: ContextTypes.DEFAULT_TYPE) -> None:
+    if len(ctx.args or []) != 1:
+        await update.message.reply_text("Usage: /removelocation CODE")
+        return
+    await _apply_edit(update, ctx, wedit.remove_location, ctx.args[0],
+                      done=f"Removed location {ctx.args[0].upper()}.")
 
 
 async def job_market_open(ctx: ContextTypes.DEFAULT_TYPE) -> None:
@@ -64,6 +143,8 @@ async def job_market_open(ctx: ContextTypes.DEFAULT_TYPE) -> None:
     app = ctx.application
     code = ctx.job.data
     wl = app.bot_data["wl"]
+    if code not in wl.locations:  # removed since this job was scheduled
+        return
     rows = await analyse(wl, app.bot_data["provider"], app.bot_data["scorer"])
     text = format_report(rows, wl, f"{wl.locations[code].name} open: sentiment")
     for chat_id in app.bot_data["chat_ids"]:
@@ -104,7 +185,8 @@ def main() -> None:
     app = (Application.builder().token(token)
            .post_init(post_init).post_shutdown(post_shutdown).build())
     app.bot_data.update(
-        wl=load_watchlist(os.getenv("WATCHLIST_PATH") or DEFAULT_PATH),
+        raw=read_raw(),
+        wl=load_watchlist(),
         provider=make_provider(
             os.getenv("DATA_PROVIDER", "stub"),
             **({} if os.getenv("DATA_PROVIDER", "stub") == "stub" else dict(
@@ -113,10 +195,13 @@ def main() -> None:
                 client_id=int(os.getenv("IBKR_CLIENT_ID", "17")),
                 news_providers=os.getenv("IBKR_NEWS_PROVIDERS", "BRFG+BRFUPDN+DJNL")))),
         scorer=LexiconScorer(),
-        chat_ids=_env_chat_ids(),
+        chat_ids=_env_ids("REPORT_CHAT_IDS"),
+        admin_ids=set(_env_ids("ADMIN_CHAT_IDS")),
     )
     for name, fn in [("start", cmd_start), ("help", cmd_start), ("sentiment", cmd_sentiment),
-                     ("markets", cmd_markets), ("watchlist", cmd_watchlist)]:
+                     ("markets", cmd_markets), ("watchlist", cmd_watchlist),
+                     ("add", cmd_add), ("remove", cmd_remove),
+                     ("addlocation", cmd_addlocation), ("removelocation", cmd_removelocation)]:
         app.add_handler(CommandHandler(name, fn))
     app.run_polling()
 

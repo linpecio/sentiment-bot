@@ -17,7 +17,19 @@ Tests: `pip install -r requirements-dev.txt && pytest`.
 ## Commands
 - `/sentiment [filter]`: ranked report; filter by asset class, location or symbol
 - `/markets`: open/closed state and next open per location
-- `/watchlist`: the static list
+- `/watchlist`: the current list
+
+### Editing the list from Telegram
+Only user IDs in `ADMIN_CHAT_IDS` (in `.env`) can edit. Your user ID is the chat ID that
+`/start` shows in a private chat with the bot.
+- `/add SYMBOL LOCATION CLASS [| Name]`, e.g. `/add TSLA US Equity | Tesla` or `/add GBP.USD FX FX`
+- `/remove SYMBOL`
+- `/addlocation CODE Timezone OPEN CLOSE [Name]`, e.g. `/addlocation SG Asia/Singapore 09:00 17:00 Singapore (SGX)` (Mon to Fri, local exchange time)
+- `/removelocation CODE` (remove its assets first)
+
+Edits take effect immediately and are saved to `config/watchlist.local.yaml`, which is
+git-ignored so a code update never overwrites your list. Delete that file to go back to
+the default `config/watchlist.yaml`.
 
 ## Layout
 - `config/watchlist.yaml`: locations (timezone, hours) and assets. Edit this to change coverage.

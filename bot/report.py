@@ -34,25 +34,18 @@ async def analyse(wl: Watchlist, provider: DataProvider, scorer: SentimentScorer
     now = now or datetime.now(timezone.utc)
     assets = [a for a in wl.assets if _matches(a, flt)]
 
-    async def fetch(a: Asset):
-        return await asyncio.gather(
+    async def one(a: Asset) -> AssetSentiment:
+        quote, heads = await asyncio.gather(
             provider.get_quote(a), provider.get_headlines(a, wl.settings.headlines_per_asset))
-
-    fetched = await asyncio.gather(*(fetch(a) for a in assets))
-    # Score every headline in one batch (one API call with an LLM scorer).
-    all_texts = [h.text for _, heads in fetched for h in heads]
-    all_scores = await scorer.score(all_texts) if all_texts else []
-
-    results, pos = [], 0
-    for a, (quote, heads) in zip(assets, fetched):
-        scores = all_scores[pos:pos + len(heads)]
-        pos += len(heads)
+        scores = await scorer.score([h.text for h in heads]) if heads else []
         top = max(zip(scores, heads), key=lambda x: abs(x[0]))[1].text if heads else None
-        results.append(AssetSentiment(
+        return AssetSentiment(
             asset=a, market_open=is_open(wl.locations[a.location], now),
             pct_change=quote.pct_change if quote else None,
             sentiment=sum(scores) / len(scores) if scores else None,
-            headline_count=len(heads), top_headline=top))
+            headline_count=len(heads), top_headline=top)
+
+    results = await asyncio.gather(*(one(a) for a in assets))
     return rank(results)
 
 
